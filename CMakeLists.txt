@@ -19,6 +19,8 @@ find_path(DOTENV_INCLUDE_DIR
 add_executable(accounts-manager
     src/main.cpp
     src/config.cpp
+    src/classes.cpp
+    src/json.cpp
 )
 
 target_link_libraries(accounts-manager PRIVATE
