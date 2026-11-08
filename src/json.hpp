@@ -1,13 +1,7 @@
 #pragma once
 
-#include <string>
+#include "player_types.hpp"
 
-struct Clan {
-    size_t clanLevel;
-    std::string name;
-    std::string tag;
-};
+#include <string_view>
 
-const std::string GetPlayerInfo(std::string source, std::string key);
-
-Clan GetPlayerClanInfo(std::string source);
+PlayerProfile ParsePlayerProfile(std::string_view source);

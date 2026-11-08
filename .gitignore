@@ -4,3 +4,6 @@ api-keys-usage.md
 bin/
 build*/
 AGENTS.md
+api.json
+api.yaml
+player_profile.txt
