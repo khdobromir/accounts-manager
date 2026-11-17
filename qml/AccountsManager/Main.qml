@@ -11,11 +11,27 @@ ApplicationWindow {
     required property AccountsModel accounts
     property int currentPage: 0
     property bool settingsOpen: false
+    required property OmarchyTheme theme
 
-    Material.theme: Material.Dark
+    Material.accent: root.theme.accent
+    Material.background: root.theme.background
+    Material.foreground: root.theme.foreground
+    Material.primary: root.theme.background
+    Material.theme: root.theme.light ? Material.Light : Material.Dark
+    color: root.theme.background
     height: 800
     minimumHeight: 480
     minimumWidth: 540
+    palette.accent: root.theme.accent
+    palette.base: root.theme.background
+    palette.button: root.theme.background
+    palette.buttonText: root.theme.foreground
+    palette.highlight: root.theme.colors.selection
+    palette.highlightedText: root.theme.selectionForeground
+    palette.placeholderText: root.theme.colors.muted
+    palette.text: root.theme.foreground
+    palette.window: root.theme.background
+    palette.windowText: root.theme.foreground
     title: qsTr("AccountsManager")
     visible: true
     width: 1100
@@ -36,7 +52,7 @@ ApplicationWindow {
 
         Label {
             Layout.fillWidth: true
-            color: "#ffcf80"
+            color: root.theme.colors.red
             text: root.accounts.error
             textFormat: Text.PlainText
             visible: root.accounts.error.length > 0
@@ -54,6 +70,7 @@ ApplicationWindow {
 
             Dashboard {
                 accounts: root.accounts
+                theme: root.theme
             }
             AccountsPage {
                 accounts: root.accounts

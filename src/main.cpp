@@ -1,5 +1,6 @@
 #include "accounts_model.hpp"
 #include "config.hpp"
+#include "omarchy_theme.hpp"
 
 #include <QDir>
 #include <QGuiApplication>
@@ -26,9 +27,10 @@ int main(int argc, char* argv[]) {
         std::fputs("AccountsManager is already running or the data directory is unavailable\n", stderr);
         return 1;
     }
+    OmarchyTheme theme;
     AccountsModel accounts(directory + "/accounts.sqlite", ReadApiKey());
     QQmlApplicationEngine engine;
-    engine.setInitialProperties({{"accounts", QVariant::fromValue(&accounts)}});
+    engine.setInitialProperties({{"accounts", QVariant::fromValue(&accounts)}, {"theme", QVariant::fromValue(&theme)}});
     QObject::connect(&engine, &QQmlApplicationEngine::objectCreationFailed,
                      &app, [] { QCoreApplication::exit(1); }, Qt::QueuedConnection);
     engine.loadFromModule("AccountsManager", "Main");

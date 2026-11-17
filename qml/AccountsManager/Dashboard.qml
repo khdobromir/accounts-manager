@@ -7,6 +7,7 @@ Pane {
     id: root
 
     required property AccountsModel accounts
+    required property OmarchyTheme theme
 
     ListView {
         id: list
@@ -19,6 +20,7 @@ Pane {
         ScrollBar.vertical: ScrollBar {
         }
         delegate: AccountCard {
+            theme: root.theme
             width: list.width
         }
     }

@@ -30,6 +30,8 @@ qt_add_executable(accounts-manager
     src/local_store.hpp
     src/accounts_model.cpp
     src/accounts_model.hpp
+    src/omarchy_theme.cpp
+    src/omarchy_theme.hpp
 )
 
 set(QML_FILES

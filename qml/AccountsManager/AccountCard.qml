@@ -7,6 +7,7 @@ Frame {
 
     readonly property var account: model.account
     required property var model
+    required property OmarchyTheme theme
 
     ColumnLayout {
         spacing: 10
@@ -24,7 +25,7 @@ Frame {
                 wrapMode: Text.Wrap
             }
             Label {
-                color: "#ffcf80"
+                color: root.theme.colors.yellow
                 text: qsTr("Требует внимания")
                 textFormat: Text.PlainText
                 visible: root.account.attention
@@ -38,7 +39,7 @@ Frame {
         }
         Label {
             Layout.fillWidth: true
-            color: "#ffcf80"
+            color: root.theme.colors.yellow
             text: root.account.action
             textFormat: Text.PlainText
             visible: root.account.action.length > 0
@@ -54,18 +55,21 @@ Frame {
                 Layout.alignment: Qt.AlignTop
                 Layout.fillWidth: true
                 activity: root.account.war
+                theme: root.theme
                 title: qsTr("КВ · %1").arg(root.account.warClan || qsTr("клан не задан"))
             }
             ActivityStatus {
                 Layout.alignment: Qt.AlignTop
                 Layout.fillWidth: true
                 activity: root.account.cwl
+                theme: root.theme
                 title: qsTr("ЛВК · %1").arg(root.account.cwlClan || qsTr("клан не задан"))
             }
             ActivityStatus {
                 Layout.alignment: Qt.AlignTop
                 Layout.fillWidth: true
                 activity: root.account.ranked
+                theme: root.theme
                 title: root.account.league ? qsTr("Ranked · %1").arg(root.account.league) : qsTr("Ranked")
             }
         }

@@ -6,6 +6,7 @@ Frame {
     id: root
 
     required property var activity
+    required property OmarchyTheme theme
     required property string title
 
     ColumnLayout {
@@ -45,14 +46,14 @@ Frame {
             wrapMode: Text.Wrap
         }
         Label {
-            color: "#ffcf80"
+            color: root.theme.colors.yellow
             text: root.activity.loading ? qsTr("Обновляется…") : qsTr("Сохранённые данные устарели")
             textFormat: Text.PlainText
             visible: root.activity.loading || root.activity.stale
         }
         Label {
             Layout.fillWidth: true
-            color: "#ffcf80"
+            color: root.theme.colors.red
             text: root.activity.error
             textFormat: Text.PlainText
             visible: root.activity.error.length > 0
