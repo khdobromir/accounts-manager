@@ -1,57 +1,9 @@
 #include "classes.hpp"
-#include "config.hpp"
-#include "json.hpp"
 
-#include <cpr/cpr.h>
-#include <cpr/util.h>
+#include <utility>
 
-#include <format>
-#include <stdexcept>
-
-namespace {
-
-std::string HttpErrorMessage(const cpr::Response& response) {
-    auto message = std::format("Player request failed: HTTP {}", response.status_code);
-    try {
-        const auto error = nlohmann::json::parse(response.text);
-        if (error.is_object()) {
-            for (const auto* key : {"reason", "message"}) {
-                const auto it = error.find(key);
-                if (it != error.end() && it->is_string()) {
-                    message += std::format("; {}: {}", key, it->get_ref<const std::string&>());
-                }
-            }
-        }
-    } catch (const nlohmann::json::exception&) {
-    }
-    return message;
-}
-
-PlayerProfile LoadPlayerProfile(const std::string& tag) {
-    if (tag.size() < 2 || tag.front() != '#') {
-        throw std::invalid_argument("Player tag must start with '#' and contain a non-empty identifier");
-    }
-
-    const auto encoded_tag = cpr::util::urlEncode(tag);
-    const auto api_key = GetEnv("API_KEY");
-    const auto response = cpr::Get(
-        cpr::Url{std::format("https://api.clashofclans.com/v1/players/{}", encoded_tag.c_str())},
-        cpr::Bearer{api_key},
-        cpr::Timeout{10000}
-    );
-    if (response.error.code != cpr::ErrorCode::OK) {
-        throw std::runtime_error(std::format("Player request failed: network error: {}", response.error.message));
-    }
-    if (response.status_code != 200) {
-        throw std::runtime_error(HttpErrorMessage(response));
-    }
-    return ParsePlayerProfile(response.text);
-}
-
-} // namespace
-
-Player::Player(std::string tag)
-    : profile_(LoadPlayerProfile(tag)) {
+Player::Player(PlayerProfile profile)
+    : profile_(std::move(profile)) {
 }
 
 const std::optional<Clan>& Player::clan() const {

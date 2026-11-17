@@ -7,7 +7,7 @@ private:
     PlayerProfile profile_;
 
 public:
-    Player(std::string tag);
+    explicit Player(PlayerProfile profile);
 
     const std::optional<Clan>& clan() const;
     const std::optional<League>& league() const;

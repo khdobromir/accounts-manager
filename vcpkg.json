@@ -1,6 +1,5 @@
 {
   "dependencies": [
-    "cpr",
     "nlohmann-json",
     "ayush272002-dotenv"
   ]

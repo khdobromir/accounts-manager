@@ -2,13 +2,18 @@
 
 #include <dotenv/dotenv.hpp>
 
-#include <string>
+#include <exception>
 
-const std::string GetEnv(std::string name) {
-    dotenv::load(".env");
-    auto var = dotenv::get<std::string>(name);
-    if (!var || var->empty()) {
-        throw std::runtime_error("error in src/config.cpp/GetEnv: failed to get API key");
+QByteArray ReadApiKey() {
+    auto key = qgetenv("API_KEY").trimmed();
+    if (key.isEmpty()) {
+        try {
+            dotenv::load(".env");
+            key = qgetenv("API_KEY").trimmed();
+        } catch (const std::exception&) {
+            return {};
+        }
     }
-    return *var;
+    if (key.contains('\r') || key.contains('\n')) return {};
+    return key;
 }

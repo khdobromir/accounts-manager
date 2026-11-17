@@ -1,5 +1,5 @@
 #pragma once
 
-#include <string>
+#include <QByteArray>
 
-const std::string GetEnv(std::string name);
+QByteArray ReadApiKey();
