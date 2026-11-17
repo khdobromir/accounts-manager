@@ -382,13 +382,14 @@ QVariantMap AccountsModel::row(const AccountSettings& account) const {
             cwl = Activity{.state = ActivityState::Unavailable, .detail = tr("Группа ЛВК не найдена; проверьте тег клана")};
         }
     }
-    auto ranked = RankedActivity(RankedGroup{});
+    Activity ranked;
+    ranked.detail = tr("Нет данных текущего турнира Ranked");
     auto ranked_dependencies = QStringList{profile_key};
     if (profile) {
         const auto key = RankedKey(*profile);
         if (!key.isEmpty()) {
             ranked_dependencies.append(key);
-            if (const auto* group = value<RankedGroup>(key)) ranked = RankedActivity(*group);
+            if (const auto* group = value<RankedGroup>(key)) ranked = RankedActivity(*group, *profile, QDateTime::currentDateTimeUtc());
         }
     }
     const auto war_map = activityMap(ordinary, war_dependencies);
@@ -419,6 +420,6 @@ QVariantMap AccountsModel::row(const AccountSettings& account) const {
     return {{"tag", account.tag}, {"name", name}, {"clan", clan_label},
             {"league", league}, {"warClan", war_clan}, {"cwlClan", account.cwl_clan},
             {"war", war_map}, {"cwl", cwl_map}, {"ranked", ranked_map}, {"action", action},
-            {"attention", war_map.value("attention").toBool() || cwl_map.value("attention").toBool() || return_to_cwl ||
+            {"attention", war_map.value("attention").toBool() || cwl_map.value("attention").toBool() || ranked_map.value("attention").toBool() || return_to_cwl ||
                 (!account.transfer_clan.isEmpty() && (!account.transfer_at.isValid() || account.transfer_at <= now))}};
 }

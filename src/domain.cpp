@@ -2,6 +2,7 @@
 #include "json.hpp"
 
 #include <QRegularExpression>
+#include <QTime>
 #include <QTimeZone>
 #include <QUrl>
 
@@ -152,10 +153,27 @@ ApiData ParseResource(ResourceKind kind, const QByteArray& body) {
         return group;
     }
     RankedGroup group;
-    if (const auto it = object.find("parameters"); it != object.end()) {
+    if (const auto it = object.find("parameters"); it != object.end() && !it->is_null()) {
         Object(*it);
         group.limit = Count(*it, "maxBattles");
-        if (it->contains("seasonId")) group.period = QString::fromStdString(it->at("seasonId").dump());
+        if (const auto season = it->find("seasonId"); season != it->end() && !season->is_null()) {
+            if (season->is_string()) group.period = String(*it, "seasonId");
+            else group.period = QString::number(*Count(*it, "seasonId"));
+        }
+    }
+    for (const auto& member : Array(object, "members")) {
+        Object(member);
+        const auto tag = String(member, "playerTag");
+        if (tag.isEmpty() || group.members.contains(tag)) throw std::runtime_error("Invalid or duplicate Ranked member");
+        const auto wins = Count(member, "attackWinCount");
+        const auto losses = Count(member, "attackLoseCount");
+        std::optional<std::int64_t> used = std::nullopt;
+        if (wins && losses) {
+            if (*wins > (std::numeric_limits<std::int64_t>::max)() - *losses)
+                throw std::runtime_error("Ranked attack count overflow");
+            used = *wins + *losses;
+        }
+        group.members.insert(tag, used);
     }
     return group;
 }
@@ -219,11 +237,37 @@ Activity CwlActivity(const CwlGroup& group, const QVector<RoundWar>& wars,
     return result;
 }
 
-Activity RankedActivity(const RankedGroup& group) {
-    // shortcut: exact Ranked counts require live evidence of complete outcomes and period rollover; see docs/api_contract.md.
-    return {.state = ActivityState::InsufficientData, .detail = group.period.isEmpty()
-        ? QString("Точный учёт Ranked ещё не подтверждён")
-        : QString("Период API: %1; точный учёт не подтверждён").arg(group.period)};
+Activity RankedActivity(const RankedGroup& group, const PlayerProfile& profile, const QDateTime& now) {
+    Activity result;
+    result.detail = "Нет полных данных текущего турнира Ranked";
+    if (!now.isValid() || !profile.league_tier || !profile.league_tier->id || !profile.current_league_season_id) return result;
+    const auto id = *profile.league_tier->id;
+    if (id == 105000036) { result.detail = "Суточный учёт Legend I пока недоступен"; return result; }
+    if (id < 105000001 || id > 105000035) { result.detail = "Неизвестные правила лиги Ranked"; return result; }
+    const auto tier = id - 105000000;
+    auto start = QDateTime(now.toUTC().date().addDays(1 - now.toUTC().date().dayOfWeek()), QTime(5, 0), QTimeZone::UTC);
+    if (start > now) start = start.addDays(-7);
+    const auto expected = QString::number(start.toSecsSinceEpoch());
+    const auto& season = *profile.current_league_season_id;
+    const auto period = season.is_string() ? QString::fromStdString(season.get<std::string>()) : QString::fromStdString(season.dump());
+    if (period != expected || (!group.period.isEmpty() && group.period != period)) {
+        result.detail = "Период Ranked изменился; требуется обновление"; return result;
+    }
+    result.end = start.addDays(7);
+    const auto member = group.members.constFind(QString::fromStdString(profile.tag));
+    if (member == group.members.cend() || !member.value()) return result;
+    // shortcut: API may omit maxBattles; update the table when rules change (source: docs/api_contract.md).
+    const auto fallback = tier <= 6 ? 6 : tier <= 12 ? 8 : tier <= 18 ? 10 : tier <= 27 ? 12
+                        : tier <= 30 ? 14 : tier <= 33 ? 18 : tier == 34 ? 24 : 30;
+    const auto limit = group.limit.value_or(fallback);
+    if (limit <= 0 || *member.value() > limit) { result.detail = "Счётчики Ranked не соответствуют лимиту"; return result; }
+    result.used = member.value();
+    result.limit = limit;
+    result.attention = *result.used < limit;
+    result.state = result.attention ? ActivityState::AttacksRemaining : ActivityState::Done;
+    result.detail = QString("Осталось %1 из %2").arg(limit - *result.used).arg(limit);
+    if (!group.limit) result.detail += " · лимит по правилам лиги";
+    return result;
 }
 
 bool SameWar(const War& a, const War& b) {

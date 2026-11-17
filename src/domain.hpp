@@ -42,6 +42,7 @@ struct CwlGroup {
 struct RankedGroup {
     QString period = {};
     std::optional<std::int64_t> limit = std::nullopt;
+    QHash<QString, std::optional<std::int64_t>> members;
 };
 
 using ApiData = std::variant<PlayerProfile, War, CwlGroup, RankedGroup>;
@@ -78,7 +79,7 @@ ApiData ParseResource(ResourceKind kind, const QByteArray& body);
 Activity WarActivity(const War& war, const QString& player, const QDateTime& now);
 Activity CwlActivity(const CwlGroup& group, const QVector<RoundWar>& wars,
                      const QString& clan, const QString& player, const QDateTime& now);
-Activity RankedActivity(const RankedGroup& group);
+Activity RankedActivity(const RankedGroup& group, const PlayerProfile& profile, const QDateTime& now);
 QString ActivityText(ActivityState state);
 bool SameWar(const War& a, const War& b);
 bool ResourceMatches(const QString& key, const ApiData& data);
