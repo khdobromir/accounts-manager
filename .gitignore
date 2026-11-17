@@ -7,3 +7,5 @@ AGENTS.md
 api.json
 api.yaml
 player_profile.txt
+graphify-out/
+.codex/
