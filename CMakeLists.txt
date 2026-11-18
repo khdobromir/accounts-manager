@@ -19,6 +19,8 @@ find_path(DOTENV_INCLUDE_DIR
 )
 
 qt_add_executable(accounts-manager
+    src/attention_model.cpp
+    src/attention_model.hpp
     src/main.cpp
     src/config.cpp
     src/classes.cpp

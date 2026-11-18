@@ -330,7 +330,7 @@ QVariantMap AccountsModel::activityMap(Activity activity, const QStringList& dep
     return {{"status", ActivityText(activity.state)}, {"detail", activity.detail}, {"attention", activity.attention && !stale},
             {"stale", stale}, {"loading", loading}, {"error", errors.join("; ")},
             {"updated", oldest.isValid() ? LocalTime(oldest) : tr("Ещё не получены")},
-            {"end", activity.end.isValid() ? LocalTime(activity.end) : QString{}}, {"source", "Supercell API"}};
+            {"endUtc", activity.end}, {"end", activity.end.isValid() ? LocalTime(activity.end) : QString{}}, {"source", "Supercell API"}};
 }
 
 QVariantMap AccountsModel::row(const AccountSettings& account) const {
@@ -338,6 +338,7 @@ QVariantMap AccountsModel::row(const AccountSettings& account) const {
     const auto* profile = value<PlayerProfile>(profile_key);
     const auto clan = ClanTag(profile);
     const auto war_clan = account.war_clan.isEmpty() ? clan : account.war_clan;
+    QString participatingWarClan = war_clan;
     Activity ordinary;
     ordinary.state = ActivityState::InsufficientData;
     QStringList war_dependencies;
@@ -349,6 +350,8 @@ QVariantMap AccountsModel::row(const AccountSettings& account) const {
         const auto group_key = CwlKey(war_clan);
         war_dependencies.append(key);
         if (const auto* war = value<War>(key)) {
+            if (war->opponent.members.contains(account.tag)) participatingWarClan = war->opponent.tag;
+            else if (war->clan.members.contains(account.tag)) participatingWarClan = war->clan.tag;
             ordinary = WarActivity(*war, account.tag, QDateTime::currentDateTimeUtc());
             if (war->phase != WarPhase::None && war->phase != WarPhase::Waiting && war->phase != WarPhase::Unknown) {
                 war_dependencies.append(group_key);
@@ -393,7 +396,9 @@ QVariantMap AccountsModel::row(const AccountSettings& account) const {
     Activity ranked;
     ranked.detail = tr("Нет данных текущего турнира Ranked");
     auto ranked_dependencies = QStringList{profile_key};
-    if (profile) {
+    if (profile && profile->league_tier && profile->league_tier->id == 105000036) {
+        ranked.detail = tr("Legend I: API не сообщает личный лимит атак на игровые сутки");
+    } else if (profile) {
         const auto key = RankedKey(*profile);
         if (!key.isEmpty()) {
             ranked_dependencies.append(key);
@@ -411,9 +416,28 @@ QVariantMap AccountsModel::row(const AccountSettings& account) const {
     const auto profile_fresh = profile_resource != resources_.cend() && !profile_resource->from_cache &&
         profile_resource->error.isEmpty() && profile_resource->fetched.isValid() &&
         profile_resource->fetched.secsTo(now) <= (refresh_seconds_ ? refresh_seconds_ : 300);
-    const auto return_to_cwl = cwl_map.value("attention").toBool() && profile_fresh && !clan.isEmpty() && clan != account.cwl_clan;
-    if (return_to_cwl)
-        action = tr("Вернуться в клан ЛВК %1").arg(account.cwl_clan) + (action.isEmpty() ? QString{} : " · " + action);
+    const bool clan_known = profile_fresh && profile && (!profile->clan || !clan.isEmpty());
+    QStringList actions;
+    QDateTime deadline;
+    auto addDeadline = [&deadline](const QDateTime& time) {
+        if (time.isValid() && (!deadline.isValid() || time < deadline)) deadline = time;
+    };
+    auto describe = [&](const QVariantMap& mode, const QString& label, const QString& targetClan) {
+        if (!mode.value("attention").toBool()) return;
+        addDeadline(mode.value("endUtc").toDateTime());
+        if (clan_known && !targetClan.isEmpty() && targetClan != clan)
+            actions.append(tr("Вернуться в клан %1 %2 для атаки").arg(label, targetClan));
+        else
+            actions.append(tr("Атаковать в %1 %2").arg(label, targetClan).trimmed());
+    };
+    describe(war_map, tr("КВ"), participatingWarClan);
+    describe(cwl_map, tr("ЛВК"), account.cwl_clan);
+    describe(ranked_map, tr("Ranked"), {});
+    const bool transfer_due = !account.transfer_clan.isEmpty() &&
+        (!account.transfer_at.isValid() || account.transfer_at <= now);
+    if (transfer_due) addDeadline(account.transfer_at);
+    const bool attention = !actions.isEmpty() || transfer_due;
+    if (!action.isEmpty()) actions.append(action);
     QString name = profile ? Text(profile->name) : account.tag;
     if (!account.alias.isEmpty()) name = account.alias;
     auto clan_label = clan;
@@ -426,8 +450,7 @@ QVariantMap AccountsModel::row(const AccountSettings& account) const {
         else if (value.is_object() && value.contains("en") && value["en"].is_string()) league = Text(value["en"].get<std::string>());
     }
     return {{"tag", account.tag}, {"name", name}, {"clan", clan_label},
-            {"league", league}, {"warClan", war_clan}, {"cwlClan", account.cwl_clan},
-            {"war", war_map}, {"cwl", cwl_map}, {"ranked", ranked_map}, {"action", action},
-            {"attention", war_map.value("attention").toBool() || cwl_map.value("attention").toBool() || ranked_map.value("attention").toBool() || return_to_cwl ||
-                (!account.transfer_clan.isEmpty() && (!account.transfer_at.isValid() || account.transfer_at <= now))}};
+            {"league", league}, {"warClan", war_clan}, {"participatingWarClan", participatingWarClan}, {"cwlClan", account.cwl_clan},
+            {"war", war_map}, {"cwl", cwl_map}, {"ranked", ranked_map}, {"action", actions.join(" · ")},
+            {"deadline", deadline}, {"deadlineLabel", deadline.isValid() ? tr("Ближайший срок: %1").arg(LocalTime(deadline)) : QString{}}, {"attention", attention}};
 }

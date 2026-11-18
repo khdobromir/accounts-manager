@@ -65,10 +65,10 @@ Dialog {
             wrapMode: Text.WrapAnywhere
         }
         Label {
-            Layout.fillWidth: true
-            text: qsTr("Точный счётчик Ranked пока недоступен: контракт API не подтверждён. Ручная отметка атак не используется.")
+            text: qsTr("Ranked показывает недельный остаток атак. Для Legend I API не сообщает личный лимит на игровые сутки.")
             textFormat: Text.PlainText
             wrapMode: Text.Wrap
+            Layout.fillWidth: true
         }
     }
 }

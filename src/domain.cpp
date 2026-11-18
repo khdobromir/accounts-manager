@@ -286,7 +286,7 @@ Activity RankedActivity(const RankedGroup& group, const PlayerProfile& profile, 
     result.detail = "Нет полных данных текущего турнира Ranked";
     if (!now.isValid() || !profile.league_tier || !profile.league_tier->id || !profile.current_league_season_id) return result;
     const auto id = *profile.league_tier->id;
-    if (id == 105000036) { result.detail = "Суточный учёт Legend I пока недоступен"; return result; }
+    if (id == 105000036) { result.detail = "Legend I: API не сообщает личный лимит атак на игровые сутки"; return result; }
     if (id < 105000001 || id > 105000035) { result.detail = "Неизвестные правила лиги Ranked"; return result; }
     const auto tier = id - 105000000;
     auto start = QDateTime(now.toUTC().date().addDays(1 - now.toUTC().date().dayOfWeek()), QTime(5, 0), QTimeZone::UTC);

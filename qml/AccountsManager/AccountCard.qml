@@ -45,6 +45,12 @@ Frame {
             visible: root.account.action.length > 0
             wrapMode: Text.Wrap
         }
+        Label {
+            text: root.account.deadlineLabel
+            textFormat: Text.PlainText
+            visible: text.length > 0
+            Layout.fillWidth: true
+        }
         GridLayout {
             Layout.fillWidth: true
             columnSpacing: 10
