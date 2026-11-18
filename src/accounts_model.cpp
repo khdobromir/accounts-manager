@@ -2,7 +2,6 @@
 
 #include <QUrlQuery>
 
-#include <algorithm>
 #include <exception>
 
 namespace {
@@ -264,7 +263,8 @@ void AccountsModel::received(const QString& key, quint64 generation, const ApiRe
     auto& resource = resources_[key];
     resource.loading = false;
     resource.error = result.error;
-    resource.http_status = result.http_status;
+    resource.group_not_found_at = result.http_status == 404 && Kind(key) == ResourceKind::CwlGroup
+        ? QDateTime::currentDateTimeUtc() : QDateTime{};
     if (result.data) {
         resource.data = result.data;
         resource.fetched = result.fetched;
@@ -292,19 +292,19 @@ void AccountsModel::received(const QString& key, quint64 generation, const ApiRe
     notifyRows();
 }
 
-QVector<RoundWar> AccountsModel::roundWars(const CwlGroup& group, QStringList& dependencies) const {
+QVector<RoundWar> AccountsModel::roundWars(const CwlGroup& group, QStringList* dependencies) const {
     QVector<RoundWar> wars;
     for (qsizetype i = 0; i < group.rounds.size(); ++i) {
         for (const auto& tag : group.rounds.at(i)) {
             const auto key = CwlWarKey(tag);
-            dependencies.append(key);
-            if (const auto* war = value<War>(key)) wars.append({static_cast<int>(i) + 1, *war});
+            if (dependencies) dependencies->append(key);
+            if (const auto* war = value<War>(key)) wars.append({static_cast<int>(i) + 1, *war, tag});
         }
     }
     return wars;
 }
 
-QVariantMap AccountsModel::activityMap(Activity activity, const QStringList& dependencies) const {
+QVariantMap AccountsModel::activityMap(Activity activity, const QStringList& dependencies, bool regularWar) const {
     QStringList errors;
     QDateTime oldest;
     bool loading = false;
@@ -314,7 +314,11 @@ QVariantMap AccountsModel::activityMap(Activity activity, const QStringList& dep
         const auto it = resources_.constFind(key);
         if (it == resources_.cend()) { stale = true; continue; }
         loading = loading || it->loading;
-        if (it->http_status == 404 && Kind(key) == ResourceKind::CwlGroup && !it->data) continue;
+        if (it->group_not_found_at.isValid() && (regularWar || !it->data)) {
+            if (it->group_not_found_at.secsTo(now) > (refresh_seconds_ ? refresh_seconds_ : 300)) stale = true;
+            if (!oldest.isValid() || it->group_not_found_at < oldest) oldest = it->group_not_found_at;
+            continue;
+        }
         if (!it->error.isEmpty()) errors.append(it->error);
         if (!it->fetched.isValid() || it->from_cache || !it->error.isEmpty() ||
             it->fetched.secsTo(now) > (refresh_seconds_ ? refresh_seconds_ : 300)) stale = true;
@@ -348,17 +352,22 @@ QVariantMap AccountsModel::row(const AccountSettings& account) const {
             ordinary = WarActivity(*war, account.tag, QDateTime::currentDateTimeUtc());
             if (war->phase != WarPhase::None && war->phase != WarPhase::Waiting && war->phase != WarPhase::Unknown) {
                 war_dependencies.append(group_key);
-                if (const auto* group = value<CwlGroup>(group_key)) {
-                    const auto wars = roundWars(*group, war_dependencies);
+                const auto groupResource = resources_.constFind(group_key);
+                const bool groupMissing = groupResource != resources_.cend() && groupResource->group_not_found_at.isValid();
+                if (const auto* group = value<CwlGroup>(group_key); group && !groupMissing) {
+                    const auto wars = roundWars(*group, &war_dependencies);
                     bool complete = true;
                     for (const auto& dep : war_dependencies) if (Kind(dep) == ResourceKind::CwlWar && !value<War>(dep)) complete = false;
-                    if (std::any_of(wars.cbegin(), wars.cend(), [war](const auto& item) { return SameWar(*war, item.war); }))
-                        ordinary = Activity{.state = ActivityState::NotParticipating, .detail = tr("Эта война относится к ЛВК")};
+                    bool matched = false;
+                    for (const auto& item : wars) {
+                        const auto same = SameWar(*war, item.war);
+                        if (same == true) { matched = true; break; }
+                        if (!same.has_value()) complete = false;
+                    }
+                    if (matched) ordinary = Activity{.state = ActivityState::NotParticipating, .detail = tr("Эта война относится к ЛВК")};
                     else if (!complete) ordinary = Activity{.state = ActivityState::InsufficientData, .detail = tr("Тип войны ещё не подтверждён")};
-                } else {
-                    const auto it = resources_.constFind(group_key);
-                    if (it == resources_.cend() || it->http_status != 404)
-                        ordinary = Activity{.state = ActivityState::InsufficientData, .detail = tr("Не удалось отличить КВ от ЛВК")};
+                } else if (!groupMissing) {
+                    ordinary = Activity{.state = ActivityState::InsufficientData, .detail = tr("Не удалось отличить КВ от ЛВК")};
                 }
             }
         }
@@ -373,12 +382,11 @@ QVariantMap AccountsModel::row(const AccountSettings& account) const {
         cwl.state = ActivityState::InsufficientData;
         cwl.detail.clear();
         if (const auto* group = value<CwlGroup>(key)) {
-            const auto wars = roundWars(*group, cwl_dependencies);
-            cwl = CwlActivity(*group, wars, account.cwl_clan, account.tag, QDateTime::currentDateTimeUtc());
-            if (std::any_of(cwl_dependencies.cbegin(), cwl_dependencies.cend(), [this](const auto& dep) {
-                    return Kind(dep) == ResourceKind::CwlWar && !value<War>(dep);
-                })) cwl = Activity{.state = ActivityState::InsufficientData, .detail = tr("Не все войны раунда доступны")};
-        } else if (resources_.value(key).http_status == 404) {
+            const auto wars = roundWars(*group);
+            QStringList neededTags;
+            cwl = CwlActivity(*group, wars, account.cwl_clan, account.tag, QDateTime::currentDateTimeUtc(), neededTags);
+            for (const auto& tag : neededTags) cwl_dependencies.append(CwlWarKey(tag));
+        } else if (resources_.value(key).group_not_found_at.isValid()) {
             cwl = Activity{.state = ActivityState::Unavailable, .detail = tr("Группа ЛВК не найдена; проверьте тег клана")};
         }
     }
@@ -392,7 +400,7 @@ QVariantMap AccountsModel::row(const AccountSettings& account) const {
             if (const auto* group = value<RankedGroup>(key)) ranked = RankedActivity(*group, *profile, QDateTime::currentDateTimeUtc());
         }
     }
-    const auto war_map = activityMap(ordinary, war_dependencies);
+    const auto war_map = activityMap(ordinary, war_dependencies, true);
     const auto cwl_map = activityMap(cwl, cwl_dependencies);
     const auto ranked_map = activityMap(ranked, ranked_dependencies);
     QString action;

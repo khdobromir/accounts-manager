@@ -6,6 +6,7 @@
 #include <QTimeZone>
 #include <QUrl>
 
+#include <algorithm>
 #include <limits>
 #include <stdexcept>
 
@@ -62,18 +63,20 @@ QDateTime Time(const Json& object, const char* field) {
     return time.toUTC();
 }
 
-WarSide Side(const Json& object) {
+WarSide Side(const Json& object, std::optional<std::int64_t> teamSize) {
     Object(object);
     WarSide side;
     side.tag = String(object, "tag");
     side.roster_known = object.contains("members") && object["members"].is_array();
+    QSet<std::int64_t> orders;
+    QStringList omitted;
     for (const auto& member : Array(object, "members")) {
         Object(member);
         const auto tag = String(member, "tag");
         if (tag.isEmpty() || side.members.contains(tag)) throw std::runtime_error("Invalid or duplicate war member");
         std::optional<std::int64_t> count = std::nullopt;
         if (member.contains("attacks") && member["attacks"].is_array()) {
-            QSet<std::int64_t> orders;
+            const auto before = orders.size();
             for (const auto& attack : member["attacks"]) {
                 Object(attack);
                 const auto order = Count(attack, "order");
@@ -81,24 +84,29 @@ WarSide Side(const Json& object) {
                     throw std::runtime_error("Invalid or duplicate war attack");
                 orders.insert(*order);
             }
-            count = static_cast<std::int64_t>(orders.size());
-        } else if (member.contains("attacks") && !member["attacks"].is_null()) {
+            count = static_cast<std::int64_t>(orders.size() - before);
+        } else if (!member.contains("attacks")) {
+            omitted.append(tag);
+        } else if (!member["attacks"].is_null()) {
             throw std::runtime_error("attacks: expected array");
         }
-        // shortcut: omitted attacks stay unknown until omission semantics are verified against the live API.
         side.members.insert(tag, count);
     }
+    // A complete regular-war lineup can account for every attack in the team total.
+    if (teamSize && *teamSize == side.members.size() && Count(object, "attacks") == orders.size())
+        for (const auto& tag : omitted) side.members[tag] = 0;
     return side;
 }
 
-War ParseWar(const Json& object) {
+War ParseWar(const Json& object, ResourceKind kind) {
     War war;
     war.phase = Phase(String(object, "state"));
     war.limit = Count(object, "attacksPerMember");
     war.start = Time(object, "startTime");
     war.end = Time(object, "endTime");
-    if (object.contains("clan")) war.clan = Side(object.at("clan"));
-    if (object.contains("opponent")) war.opponent = Side(object.at("opponent"));
+    const auto teamSize = kind == ResourceKind::War ? Count(object, "teamSize") : std::nullopt;
+    if (object.contains("clan")) war.clan = Side(object.at("clan"), teamSize);
+    if (object.contains("opponent")) war.opponent = Side(object.at("opponent"), teamSize);
     if (war.start.isValid() && war.end.isValid() && war.end <= war.start)
         throw std::runtime_error("War ends before it starts");
     return war;
@@ -121,7 +129,7 @@ ApiData ParseResource(ResourceKind kind, const QByteArray& body) {
     if (kind == ResourceKind::Player) return ParsePlayerProfile(std::string_view(body.constData(), static_cast<std::size_t>(body.size())));
     const auto object = Json::parse(body.constData(), body.constData() + body.size());
     Object(object);
-    if (kind == ResourceKind::War || kind == ResourceKind::CwlWar) return ParseWar(object);
+    if (kind == ResourceKind::War || kind == ResourceKind::CwlWar) return ParseWar(object, kind);
     if (kind == ResourceKind::CwlGroup) {
         CwlGroup group;
         group.season = String(object, "season");
@@ -212,13 +220,17 @@ Activity WarActivity(const War& war, const QString& player, const QDateTime& now
 }
 
 Activity CwlActivity(const CwlGroup& group, const QVector<RoundWar>& wars,
-                     const QString& clan, const QString& player, const QDateTime& now) {
+                     const QString& clan, const QString& player, const QDateTime& now, QStringList& dependencies) {
     if (group.phase == WarPhase::None) return {.state = ActivityState::NotParticipating};
     if (group.phase == WarPhase::Unknown) return {.state = ActivityState::InsufficientData};
     if (group.season.isEmpty() || !group.rosters.contains(clan)) return {.state = ActivityState::InsufficientData};
     if (!group.rosters.value(clan).contains(player)) return {.state = ActivityState::NotParticipating, .detail = "Нет в сезонной заявке"};
     if (group.phase == WarPhase::Ended) return {.state = ActivityState::Ended, .detail = group.season};
+    const RoundWar* active = nullptr;
     const RoundWar* selected = nullptr;
+    QSet<QString> identified;
+    QHash<int, QString> clanRounds;
+    int lastEnded = 0;
     auto priority = [&now](const War& war) {
         if (war.phase == WarPhase::Active) return war.end.isValid() && war.end <= now ? 1 : 3;
         if (war.phase == WarPhase::Preparation) return 2;
@@ -226,9 +238,41 @@ Activity CwlActivity(const CwlGroup& group, const QVector<RoundWar>& wars,
         return 0;
     };
     for (const auto& item : wars) {
+        if (!item.war.clan.tag.isEmpty() && !item.war.opponent.tag.isEmpty()) identified.insert(item.tag);
         if (item.war.clan.tag != clan && item.war.opponent.tag != clan) continue;
+        if (clanRounds.contains(item.round)) {
+            dependencies.append({clanRounds.value(item.round), item.tag});
+            return {.state = ActivityState::InsufficientData, .detail = "Состав раунда противоречив"};
+        }
+        clanRounds.insert(item.round, item.tag);
+        if (priority(item.war) == 1) lastEnded = std::max(lastEnded, item.round);
+        if (item.war.phase == WarPhase::Active && item.war.start.isValid() &&
+            item.war.start <= now && item.war.end > now) {
+            if (active) {
+                dependencies.append({active->tag, item.tag});
+                return {.state = ActivityState::InsufficientData, .detail = "Несколько активных войн клана"};
+            }
+            active = &item;
+        }
         if (!selected || priority(item.war) > priority(selected->war) ||
             (priority(item.war) == priority(selected->war) && item.round > selected->round)) selected = &item;
+    }
+    if (active) {
+        selected = active;
+        dependencies.append(active->tag);
+    } else {
+        bool complete = true;
+        for (qsizetype i = std::max(0, lastEnded - 1); i < group.rounds.size(); ++i) {
+            const auto own = clanRounds.constFind(static_cast<int>(i + 1));
+            if (own != clanRounds.cend()) {
+                dependencies.append(*own);
+                continue;
+            }
+            const auto& round = group.rounds.at(i);
+            dependencies.append(round);
+            for (const auto& tag : round) if (!identified.contains(tag)) complete = false;
+        }
+        if (!complete) return {.state = ActivityState::InsufficientData, .detail = "Текущий раунд ещё не определён"};
     }
     if (!selected) return {.state = ActivityState::Waiting, .detail = "Раунд ещё не опубликован"};
     auto result = WarActivity(selected->war, player, now);
@@ -270,10 +314,15 @@ Activity RankedActivity(const RankedGroup& group, const PlayerProfile& profile, 
     return result;
 }
 
-bool SameWar(const War& a, const War& b) {
-    return a.start.isValid() && a.start == b.start && !a.clan.tag.isEmpty() &&
-        ((a.clan.tag == b.clan.tag && a.opponent.tag == b.opponent.tag) ||
-         (a.clan.tag == b.opponent.tag && a.opponent.tag == b.clan.tag));
+std::optional<bool> SameWar(const War& a, const War& b) {
+    const bool startsKnown = a.start.isValid() && b.start.isValid();
+    if (startsKnown && a.start != b.start) return false;
+    if (a.clan.tag.isEmpty() || a.opponent.tag.isEmpty() || b.clan.tag.isEmpty() || b.opponent.tag.isEmpty())
+        return std::nullopt;
+    const bool sameClans = (a.clan.tag == b.clan.tag && a.opponent.tag == b.opponent.tag) ||
+                           (a.clan.tag == b.opponent.tag && a.opponent.tag == b.clan.tag);
+    if (!sameClans) return false;
+    return startsKnown ? std::optional{true} : std::nullopt;
 }
 
 bool ResourceMatches(const QString& key, const ApiData& data) {

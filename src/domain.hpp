@@ -68,6 +68,7 @@ struct Activity {
 struct RoundWar {
     int round = 0;
     War war;
+    QString tag = {};
 };
 
 QString NormalizeTag(QString tag);
@@ -78,10 +79,10 @@ QString CwlKey(const QString& clan);
 ApiData ParseResource(ResourceKind kind, const QByteArray& body);
 Activity WarActivity(const War& war, const QString& player, const QDateTime& now);
 Activity CwlActivity(const CwlGroup& group, const QVector<RoundWar>& wars,
-                     const QString& clan, const QString& player, const QDateTime& now);
+                     const QString& clan, const QString& player, const QDateTime& now, QStringList& dependencies);
 Activity RankedActivity(const RankedGroup& group, const PlayerProfile& profile, const QDateTime& now);
 QString ActivityText(ActivityState state);
-bool SameWar(const War& a, const War& b);
+std::optional<bool> SameWar(const War& a, const War& b);
 bool ResourceMatches(const QString& key, const ApiData& data);
 
 struct AccountSettings {

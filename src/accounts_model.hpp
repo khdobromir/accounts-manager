@@ -51,7 +51,7 @@ private:
         std::optional<ApiData> data = std::nullopt;
         QDateTime fetched;
         QString error;
-        int http_status = 0;
+        QDateTime group_not_found_at;
         bool loading = false;
         bool from_cache = true;
     };
@@ -65,8 +65,8 @@ private:
     void saveAccounts(const QList<AccountSettings>& accounts);
     void notifyRows();
     int findAccount(const QString& tag) const;
-    QVector<RoundWar> roundWars(const CwlGroup& group, QStringList& dependencies) const;
-    QVariantMap activityMap(Activity activity, const QStringList& dependencies) const;
+    QVector<RoundWar> roundWars(const CwlGroup& group, QStringList* dependencies = nullptr) const;
+    QVariantMap activityMap(Activity activity, const QStringList& dependencies, bool regularWar = false) const;
     QVariantMap row(const AccountSettings& account) const;
 
     QString database_path_;
