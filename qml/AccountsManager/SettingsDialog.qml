@@ -6,6 +6,7 @@ import QtQuick.Layouts
 Dialog {
     id: root
 
+    required property DesktopSession desktop
     required property AccountsModel accounts
 
     Material.elevation: 0
@@ -28,7 +29,8 @@ Dialog {
             text: qsTr("Сохранить")
 
             onClicked: {
-                root.accounts.setRefreshMinutes(interval.value);
+                if (reminderSwitch.checked === root.desktop.enabled || root.desktop.setEnabled(reminderSwitch.checked))
+                    root.accounts.setRefreshMinutes(interval.value);
             }
         }
     }
@@ -57,6 +59,21 @@ Dialog {
             from: 0
             to: 1440
             value: root.accounts.refreshMinutes
+        }
+        CheckBox {
+            id: reminderSwitch
+            text: qsTr("Фоновые напоминания")
+            checked: root.desktop.enabled
+        }
+        Label {
+            text: root.desktop.error
+            textFormat: Text.PlainText
+            visible: text.length > 0
+            Layout.fillWidth: true
+        }
+        Button {
+            text: qsTr("Выйти из приложения")
+            onClicked: Qt.quit()
         }
         Label {
             Layout.fillWidth: true

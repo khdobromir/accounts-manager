@@ -104,6 +104,7 @@ struct CacheEntry {
 struct StoredState {
     QList<AccountSettings> accounts;
     QHash<QString, CacheEntry> cache;
+    QSet<QString> reminders;
     int refresh_seconds = 300;
 };
 Q_DECLARE_METATYPE(StoredState)

@@ -17,6 +17,7 @@ public:
     void setInterval(int seconds);
     void setCwlSeason(const QString& tag, const QString& clan, const QString& season);
     void close();
+    void recordReminder(const QString& event);
 
 signals:
     void loaded(const StoredState& state, const QString& error);

@@ -36,18 +36,23 @@ void LocalStore::load() {
         if (!query.next()) throw std::runtime_error("Не удалось прочитать версию базы");
         const auto version = query.value(0).toInt();
         query.finish();
-        if (version > 1) throw std::runtime_error("База создана более новой версией приложения");
+        if (version > 2) throw std::runtime_error("База создана более новой версией приложения");
+        if (version < 2) Require(db_.transaction(), db_);
         if (version == 0) {
-            Require(db_.transaction(), db_);
             Execute(query, "CREATE TABLE accounts (tag TEXT PRIMARY KEY, alias TEXT NOT NULL, position INTEGER NOT NULL, "
                            "war_clan TEXT NOT NULL, cwl_clan TEXT NOT NULL, cwl_season TEXT NOT NULL, "
                            "transfer_clan TEXT NOT NULL, transfer_at TEXT NOT NULL)");
             Execute(query, "CREATE TABLE settings (key TEXT PRIMARY KEY, value INTEGER NOT NULL)");
             Execute(query, "CREATE TABLE api_cache (resource TEXT PRIMARY KEY, body BLOB NOT NULL, fetched_at TEXT NOT NULL)");
-            Execute(query, "PRAGMA user_version=1");
+        }
+        if (version < 2) {
+            Execute(query, "CREATE TABLE reminders (event TEXT PRIMARY KEY NOT NULL)");
+            Execute(query, "PRAGMA user_version=2");
             Require(db_.commit(), db_);
         }
         StoredState state;
+        Execute(query, "SELECT event FROM reminders");
+        while (query.next()) state.reminders.insert(query.value(0).toString());
         Execute(query, "SELECT tag, alias, war_clan, cwl_clan, cwl_season, transfer_clan, transfer_at FROM accounts ORDER BY position, tag");
         QSet<QString> tags;
         while (query.next()) {
@@ -173,4 +178,11 @@ void LocalStore::setCwlSeason(const QString& tag, const QString& clan, const QSt
     query.addBindValue(tag);
     query.addBindValue(clan);
     if (!query.exec()) emit failed(tr("Не удалось сохранить сезон ЛВК: %1").arg(query.lastError().text()));
+}
+
+void LocalStore::recordReminder(const QString& event) {
+    QSqlQuery query(db_);
+    query.prepare("INSERT INTO reminders VALUES (?) ON CONFLICT(event) DO NOTHING");
+    query.addBindValue(event);
+    if (!query.exec()) emit failed(tr("Не удалось сохранить напоминание: %1").arg(query.lastError().text()));
 }

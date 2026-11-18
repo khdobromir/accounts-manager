@@ -8,6 +8,8 @@ import QtQuick.Layouts
 ApplicationWindow {
     id: root
 
+    required property DesktopSession desktop
+    required property bool startHidden
     required property AccountsModel accounts
     property int currentPage: 0
     property bool settingsOpen: false
@@ -33,7 +35,7 @@ ApplicationWindow {
     palette.window: root.theme.background
     palette.windowText: root.theme.foreground
     title: qsTr("AccountsManager")
-    visible: true
+    visible: !startHidden
     width: 1100
 
     header: AppToolbar {
@@ -82,6 +84,7 @@ ApplicationWindow {
 
         sourceComponent: Component {
             SettingsDialog {
+                desktop: root.desktop
                 accounts: root.accounts
                 parent: Overlay.overlay
 

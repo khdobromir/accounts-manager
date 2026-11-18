@@ -44,6 +44,7 @@ AccountsModel::AccountsModel(QString databasePath, QByteArray apiKey, QObject* p
         if (!error.isEmpty()) { error_ = tr("Ошибка хранилища: %1").arg(error); emit stateChanged(); return; }
         beginResetModel();
         accounts_ = state.accounts;
+        reminders_ = state.reminders;
         refresh_seconds_ = state.refresh_seconds;
         for (auto it = state.cache.cbegin(); it != state.cache.cend(); ++it) {
             try {
@@ -58,7 +59,7 @@ AccountsModel::AccountsModel(QString databasePath, QByteArray apiKey, QObject* p
         endResetModel();
         if (refresh_seconds_) refresh_timer_.start(refresh_seconds_ * 1000);
         emit stateChanged();
-        refresh();
+        if (refresh_seconds_) refresh();
     });
     connect(store_, &LocalStore::accountsSaved, this, [this](const QList<AccountSettings>& accounts, const QString& error) {
         saving_ = false;
@@ -452,5 +453,11 @@ QVariantMap AccountsModel::row(const AccountSettings& account) const {
     return {{"tag", account.tag}, {"name", name}, {"clan", clan_label},
             {"league", league}, {"warClan", war_clan}, {"participatingWarClan", participatingWarClan}, {"cwlClan", account.cwl_clan},
             {"war", war_map}, {"cwl", cwl_map}, {"ranked", ranked_map}, {"action", actions.join(" · ")},
+            {"transferAt", account.transfer_at}, {"transferClan", account.transfer_clan},
             {"deadline", deadline}, {"deadlineLabel", deadline.isValid() ? tr("Ближайший срок: %1").arg(LocalTime(deadline)) : QString{}}, {"attention", attention}};
+}
+
+void AccountsModel::recordReminder(const QString& event) {
+    reminders_.insert(event);
+    QMetaObject::invokeMethod(store_, [store = store_, event] { store->recordReminder(event); }, Qt::QueuedConnection);
 }

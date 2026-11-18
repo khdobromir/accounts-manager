@@ -10,7 +10,7 @@ set(CMAKE_CXX_STANDARD 26)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-find_package(Qt6 6.8 REQUIRED COMPONENTS Core Network Sql Quick QuickControls2)
+find_package(Qt6 6.8 REQUIRED COMPONENTS Core DBus Network Sql Quick QuickControls2)
 qt_standard_project_setup(REQUIRES 6.8)
 find_package(nlohmann_json CONFIG REQUIRED)
 find_path(DOTENV_INCLUDE_DIR
@@ -21,6 +21,8 @@ find_path(DOTENV_INCLUDE_DIR
 qt_add_executable(accounts-manager
     src/attention_model.cpp
     src/attention_model.hpp
+    src/desktop_session.cpp
+    src/desktop_session.hpp
     src/main.cpp
     src/config.cpp
     src/classes.cpp
@@ -57,6 +59,7 @@ qt_add_qml_module(accounts-manager
 )
 
 target_link_libraries(accounts-manager PRIVATE
+    Qt6::DBus
     Qt6::Core
     Qt6::Network
     Qt6::Sql

@@ -32,6 +32,8 @@ public:
     int refreshMinutes() const;
     QString error() const;
     QString databasePath() const;
+    bool hasReminder(const QString& event) const { return reminders_.contains(event); }
+    void recordReminder(const QString& event);
     Q_INVOKABLE bool addAccount(const QString& tag);
     Q_INVOKABLE bool updateAccount(const QString& tag, const QString& alias, const QString& warClan,
                                    const QString& cwlClan, const QString& transferClan, const QString& transferAt);
@@ -76,6 +78,7 @@ private:
     QList<AccountSettings> accounts_;
     QHash<QString, Resource> resources_;
     QSet<QString> requested_;
+    QSet<QString> reminders_;
     QTimer refresh_timer_;
     QTimer clock_timer_;
     quint64 generation_ = 0;

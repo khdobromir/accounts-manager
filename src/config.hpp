@@ -2,4 +2,4 @@
 
 #include <QByteArray>
 
-QByteArray ReadApiKey();
+QByteArray ReadApiKey(bool background);
