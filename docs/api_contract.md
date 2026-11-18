@@ -1,85 +1,44 @@
-# Контракт API и ограничения MVP
+# API contract and limitations
 
-Реализация использует официальный read-only API `https://api.clashofclans.com/v1`.
-Локальная схема Swagger v1 (`api.yaml`, не включена в Git) использована как
-источник имён полей, но не как доказательство семантики реальных ответов.
+AccountsManager reads the official Supercell API at `https://api.clashofclans.com/v1`.
 
-## Результат проверки 17 ноября 2026
+## Regular Clan Wars
 
-После обновления ключа запросы списка лиг, профиля и Ranked-группы вернули HTTP
-200. Ранее наблюдался 403; его причина отдельно не установлена. Ключи, заголовки
-авторизации и содержимое `.env` не включаются в документацию.
+`GET /clans/{clanTag}/currentwar` supplies the phase, start and end times, `attacksPerMember` and the members of both sides. Player tags identify participants. An explicit empty `attacks` array counts as zero. For a missing array, the count is zero only when the full lineup is present and the recorded attacks already account for the entire team total. Otherwise it remains unknown. An explicit null also remains unknown. The parser rejects duplicate attack orders, mismatched attacker tags and invalid field types.
 
-## Обычная КВ
+The parser accepts camelCase phases and underscore variants. An unknown phase yields insufficient data. The client compares both clan tags and the start time against CWL wars to identify a shared war. If the type remains uncertain, it withholds the regular-war count.
 
-`GET /clans/{clanTag}/currentwar`: `state`, `attacksPerMember`, `startTime`,
-`endTime`, стороны `clan`/`opponent`, участники `members`, их `attacks`.
-Игрок сопоставляется по тегу; явный пустой массив атак означает ноль.
-Отсутствующее/null поле атак остаётся неизвестным: считать его нулём без проверки
-реальных ответов небезопасно. Предел берётся из `attacksPerMember`, не из константы.
-Дубликаты порядковых номеров атак и неправильные типы отвергаются.
+## Clan War Leagues
 
-Поддерживаются распространённые camelCase-состояния и варианты enum из локальной
-схемы. Неизвестное состояние не интерпретируется как отсутствие войны.
-Идентичность обычной войны и войны ЛВК сравнивается по сторонам и времени начала.
-Если тип войны определить нельзя, точный статус КВ не заявляется.
+The configured CWL clan determines the group requested from `GET /clans/{clanTag}/currentwar/leaguegroup`. Published war tags lead to `GET /clanwarleagues/wars/{warTag}`. The placeholder `#0` has no war resource. Group HTTP 404 means that the group could not be found for that clan.
 
-## ЛВК
+The season roster establishes eligibility. Each round has its own lineup. A player outside the season roster can be classified from the group alone. A uniquely identified, currently active war for the clan provides the attack count independently of missing historical rounds. An active war takes precedence over preparation. If a missing war could determine the current round, the count remains unknown. Expired wars do not trigger attack reminders. A missing or null personal attack array in a CWL war leaves usage unknown.
 
-`GET /clans/{clanTag}/currentwar/leaguegroup` и
-`GET /clanwarleagues/wars/{warTag}`. Клан задаётся отдельно от текущего клана.
-Сезонный состав не означает участие в конкретном раунде. Заполнители `#0`
-не запрашиваются. Активная война имеет приоритет перед подготовкой следующей;
-истёкшая война не требует атаки. Недоступность войны не превращается в ноль атак.
-404 группы означает, что группа не найдена; для вручную заданного клана это
-не доказательство отсутствия участия игрока.
+## Weekly Ranked
 
-## Ranked: остаток атак текущего недельного турнира
+The player profile supplies `currentLeagueGroupTag` and `currentLeagueSeasonId` for `GET /leaguegroup/{leagueGroupTag}/{leagueSeasonId}?playerTag=…`. For the matching `members[].playerTag`, attacks used equal `attackWinCount + attackLoseCount`. Both counters must be nonnegative integers. Zero is valid. Missing counters, repeated members, invalid counts and overflow cannot produce an exact remainder. Profile-wide wins, defenses, trophies and battle-log length do not enter the calculation.
 
-`GET /leaguegroup/{leagueGroupTag}/{leagueSeasonId}?playerTag=…` запрашивается по
-`currentLeagueGroupTag` / `currentLeagueSeasonId` профиля. Участник выбирается по
-`members[].playerTag`; использовано = `attackWinCount + attackLoseCount`.
-Общие `attackWins`, обороны, трофеи и количество записей журнала не используются.
-Нулевые счётчики означают ноль, отсутствующие/null остаются неизвестными.
-Повторы участников, отрицательные/дробные значения и переполнение отвергаются.
+The limit comes from `parameters.maxBattles`. When absent, the interface labels the fallback limit from the [Supercell league rules](https://sc-clashofclans.zendesk.com/hc/en-us/articles/49529109982875-Ranked-Leagues).
 
-Лимит берётся из `parameters.maxBattles`. В проверенных ответах `parameters`
-отсутствует, поэтому используется резервная таблица
-[официальных правил Supercell](https://sc-clashofclans.zendesk.com/hc/en-us/articles/49529109982875-Ranked-Leagues),
-проверенная 17 ноября 2026:
-
-| Лиги | Атак за неделю |
-|---|---:|
+| League tiers | Weekly attacks |
+| --- | ---: |
 | 1–6 | 6 |
 | 7–12 | 8 |
 | 13–18 | 10 |
 | 19–27 | 12 |
 | 28–30 | 14 |
 | 31–33 | 18 |
-| Legend III / II (34 / 35) | 24 / 30 |
+| Legend III (34) | 24 |
+| Legend II (35) | 30 |
 
-API `/leaguetiers` подтвердил идентификаторы `105000001`–`105000036`.
-При резервном лимите интерфейс явно пишет «лимит по правилам лиги»; таблица
-потребует обновления, если Supercell изменит правила. Неизвестная лига не получает
-произвольный лимит. Для Legend I (36) суточный учёт пока недоступен: недельная
-сумма не подменяет дневной остаток и лимит при позднем вступлении.
+The table covers IDs `105000001` through `105000035` and needs updating when the rules change. Unknown tiers have no fallback. The profile period must match the start of the current week at Monday 05:00 UTC. A supplied `parameters.seasonId` must also match. A rollover, missing participant or usage above the limit yields insufficient data. Each count belongs to a single API snapshot.
 
-Период профиля должен совпадать с началом текущей недели: понедельник 05:00 UTC.
-Если API вернул `parameters.seasonId`, он также должен совпасть. На границе недели
-предыдущий период перестаёт выдавать число; старые/будущие периоды, отсутствующий
-участник, неполные счётчики и использованное сверх лимита дают «недостаточно данных».
-Числа относятся к последнему снимку API, а кеш/ошибки отмечаются существующим UI.
+## Legend I
 
-Живые снимки аккаунта подтвердили: текущий период — 0 побед и 0 поражений;
-предыдущий — 18 побед и 0 поражений, 18 записей атак и `maxBattles=18` в истории.
-Это подтверждает согласованность полей, но не измеряет задержку API и не заменяет
-сравнение с игрой непосредственно до/после новой атаки или поражения.
+Legend I (`105000036`) uses league days starting at 05:00 UTC. Late entry can reduce the player's daily allocation. The battle log identifies observed attacks and their timestamps. An exact remainder also requires complete daily coverage and the number of targets actually assigned to the player. The dashboard reports the daily allocation as unknown. [Supercell Legend League guide](https://support.supercell.com/clash-of-clans/en/articles/legend-league-4.html)
 
-## Надёжность
+ClashKing's daily Legend battle log lists observed attacks and defenses. Its public schema omits the player's assigned target count, so it cannot supply the missing allowance. AccountsManager uses Supercell as its sole game data source. [ClashKing API schema](https://api.clashk.ing/openapi.json)
 
-Транспорт отделён от предметных данных и SQLite. Используются
-[асинхронные ответы Qt Network](https://doc.qt.io/qt-6/qnetworkaccessmanager.html#details),
-проверка TLS, ограничение ответа 4 МиБ, общий срок запроса 10 с, очередь до четырёх
-запросов и пауза после 429. Это настройки приложения, а не заявленные лимиты API.
-Последний успешный снимок сохраняется при ошибках; возраст и ошибка отображаются.
-Счётчики прошлой войны/периода не суммируются с новыми.
+## Network and cache
+
+Qt Network handles requests asynchronously and validates TLS certificates. The client limits responses to 4 MiB, allows up to four simultaneous requests, sets a ten-second deadline and backs off after HTTP 429. These are client settings. SQLite retains the last successful snapshot after an error. The dashboard shows its age and error state. Counters apply only to their own war or tournament period. [Qt Network](https://doc.qt.io/qt-6/qnetworkaccessmanager.html)

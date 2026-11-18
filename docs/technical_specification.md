@@ -1,302 +1,174 @@
-# Техническое задание: AccountsManager
+# AccountsManager technical specification
 
-**Версия:** 1.0  
-**Дата:** 3 ноября 2026 года  
-**Статус:** предварительное ТЗ для самостоятельной разработки  
-**Тип продукта:** неофициальное кроссплатформенное приложение-компаньон для Clash of Clans
+**Version 1.0 · November 3, 2026**
+Preliminary specification for an independently developed, unofficial Clash of Clans companion.
 
-## 1. Назначение и мотивация
+## 1. Purpose and motivation
 
-**AccountsManager** — приложение для управления несколькими игровыми аккаунтами Clash of Clans из единого интерфейса.
+AccountsManager brings several Clash of Clans accounts into one interface. A player can see which accounts have attacks left in regular Clan Wars, Clan War Leagues (CWL) and individual Ranked Battles, and which clan they need to visit next.
 
-При игре на нескольких аккаунтах неудобно постоянно переключаться между ними, чтобы проверить оставшиеся атаки в обычных клановых войнах (КВ), Лиге войн кланов (ЛВК / CWL) и индивидуальном рейтинговом режиме (Ranked), а также вспомнить, на какой аккаунт и в какой клан необходимо перейти.
+The game API supplies activity data automatically. Manual input is appropriate for a player's own plans, such as a future clan transfer. The project also provides hands-on experience with C++, asynchronous APIs, storage and interface development. The author makes the technical decisions and uses AI for guidance.
 
-**Ключевой принцип проекта — автоматическое получение игровых данных через API.** Приложение не должно превращаться в ручной чек-лист, где пользователь сам отмечает выполненные атаки. Ручной ввод допускается только для пользовательских планов, например будущего перехода в другой клан, о котором игровой API знать не может.
+## 2. Goals
 
-Проект также является самостоятельной учебной разработкой на C++: цель — написать и понимать код самому, получить практику работы с API, асинхронностью, хранением данных, интерфейсом и тестированием. ИИ допустим как наставник и помощник в поиске решений, но не как основной автор программы.
+1. Show activity across accounts on one screen.
+2. Calculate used and remaining regular-war and CWL attacks from available game data.
+3. Track individual Ranked attacks separately from CWL and unlimited farming battles.
+4. Help players plan clan transfers during wars and CWL.
+5. Present the information clearly and consistently.
+6. Start with a useful local application while keeping future mobile access and synchronization feasible.
 
-## 2. Цели проекта
+## 3. Audience and platforms
 
-1. Показывать на одном экране состояние нескольких игровых аккаунтов без необходимости переключаться между ними в игре.
-2. Автоматически определять выполненные и оставшиеся атаки в КВ и ЛВК, насколько это позволяют доступные игровые данные.
-3. Автоматически учитывать атаки **индивидуальной рейтинговой лиги (Ranked Battles)** — не путать с ЛВК и обычными безлимитными боями для фарма.
-4. Помогать планировать переходы между кланами во время ЛВК и обычных КВ.
-5. Обеспечить удобный, понятный, визуально согласованный интерфейс.
-6. Начать с работоспособной локальной версии и сохранить возможность расширения до мобильных платформ и синхронизации между устройствами.
+The first user is the author, who plays on several accounts. The application may later be published as a free, open-source tool for players with similar needs. Linux, including Omarchy and Hyprland, is the initial platform. Android and iOS are longer-term possibilities subject to feasibility. The local version operates without a server or cross-device synchronization.
 
-## 3. Целевые пользователи и платформы
+## 4. User scenarios
 
-Первый пользователь — автор приложения, который играет в Clash of Clans на нескольких аккаунтах. В перспективе продукт может быть опубликован как бесплатный open-source инструмент для игроков с аналогичным сценарием.
+### UC-01. Review all accounts
 
-**Платформы:**
+At launch the player sees each account's name, tag, current clan where known, status and remaining attacks in regular war, current CWL round and individual Ranked. Cards show planned transfers and the last successful update. The attention filter brings time-sensitive accounts to the top.
 
-- **Первая очередь:** Linux (включая Omarchy / Hyprland) как основная среда разработки и тестирования; Windows как следующая desktop-платформа.
-- **В перспективе:** Android и iOS, при условии подтверждённой технической и эксплуатационной целесообразности.
+### UC-02. Check a regular war
 
-Не требуется с самого начала обеспечивать синхронизацию между устройствами или развёртывать сервер.
+Identify whether the account participates, how many attacks it has used and how many remain. Distinguish matchmaking, preparation, active war, completed war, absence of war and unavailable data.
 
-## 4. Основные пользовательские сценарии
+### UC-03. Check CWL
 
-### UC-01. Обзор всех аккаунтов
+Show seasonal eligibility, current round and individual attack status using the clan entered for CWL. The player's current clan can differ.
 
-Пользователь запускает AccountsManager и видит список своих аккаунтов с актуальным состоянием активности, например:
+### UC-04. Check individual Ranked
 
-- имя и тег игрока;
-- текущий клан (если есть);
-- состояние КВ и число оставшихся атак;
-- состояние ЛВК и возможность атаки в текущем раунде;
-- состояние индивидуальной рейтинговой лиги и число оставшихся атак;
-- предупреждение о запланированном переходе в другой клан;
-- время последнего успешного обновления данных.
+Show the player's league, applicable tournament period, available allowance, usage and remainder when the source supports them. This is a required product scenario. When an exact value cannot be derived, explain the limitation.
 
-Аккаунты, требующие действий, должны быть заметны в общем списке.
+### UC-05. Plan a clan transfer
 
-### UC-02. Проверка обычной КВ
+The player sets a CWL clan and optionally plans a transfer to another clan for a regular war. The application shows where to return to attack and can send a reminder. The player performs all transfers in the game.
 
-Пользователь видит, участвует ли аккаунт в активной обычной КВ, сколько атак уже выполнено и сколько ещё доступно. Необходимо различать отсутствие войны, подготовку, активную войну, завершённую войну и недоступность данных.
+### UC-06. Refresh activity
 
-### UC-03. Проверка ЛВК
+Request a refresh on startup, at the configured interval or on user action according to the refresh settings. A request failure for one account must allow the others to remain usable.
 
-Пользователь видит участие аккаунта в ЛВК, информацию о текущем раунде и статус своей атаки. Данные ЛВК следует определять по **клану участия в ЛВК**, который может отличаться от текущего клана игрока.
+## 5. Functional requirements
 
-### UC-04. Проверка индивидуальной рейтинговой лиги
+### 5.1. Account management
 
-Пользователь видит текущую рейтинговую лигу, действующий период боёв (день, неделя или иной турнирный интервал по актуальным правилам), количество доступных и использованных атак и вычисленное число оставшихся атак.
+Add players by public tag, retrieve names and basic profile details, set optional aliases, remove accounts and reorder them. Persist the list between sessions. Users supply no passwords or Supercell ID credentials.
 
-**Это обязательный продуктовый сценарий.** До его реализации необходимо проверить доступность и точность исходных данных API. Если точное значение определить нельзя, приложение не должно показывать предположение как достоверный факт.
+### 5.2. Dashboard
 
-### UC-05. Планирование перехода между кланами
+Give each activity its own status. Distinguish remaining attacks, completion, non-participation, waiting, unavailable data and insufficient data. Highlight accounts needing attention. The default list follows the user's order. The filtered list sorts by nearest actionable deadline and places undated actions last. Retain the last successful snapshot after a failure and mark its age. Missing information must never create a false zero.
 
-Пользователь задаёт для аккаунта клан участия в ЛВК и при необходимости планирует переходы в другие кланы для КВ. Приложение показывает, куда следует вернуться для атаки, и может напомнить об этом.
+### 5.3. Regular Clan Wars
 
-Изменение клана происходит **только в самой игре**: AccountsManager ничего не переключает автоматически.
+Fetch the tracked clan's current war. Match the account to the lineup by player tag and use the limit for that war. Show the phase, used and remaining attacks and end time when available.
 
-### UC-06. Обновление данных
+### 5.4. Clan War Leagues
 
-Приложение запрашивает данные при открытии и/или по действию пользователя, а впоследствии может обновлять их периодически. Ошибки одного аккаунта не должны мешать просмотру остальных.
+Store the clan binding for the current CWL season. Fetch the group and relevant round, identify participation in that round and determine whether the player has attacked. Show the round's status and deadline where available. A temporary change of home clan must preserve CWL tracking.
 
-## 5. Функциональные требования
+### 5.5. Individual Ranked
 
-### 5.1. Управление аккаунтами — обязательно
+Use the current league and tournament period. Derive the exact usage and remainder only from confirmed data. Support different allowances, period rollover and league changes. Where official data is insufficient, evaluate the coverage, delay and terms of alternative sources before adopting one. Display insufficient data while the answer is unknown.
 
-- Добавление аккаунта по публичному тегу игрока.
-- Получение и отображение имени, тега и базовых сведений через API.
-- Возможность добавить, удалить или переупорядочить несколько аккаунтов.
-- Необязательные пользовательские псевдонимы для удобства.
-- Локальное сохранение списка аккаунтов между запусками.
-- Работа без передачи паролей и учётных данных Supercell ID.
+### 5.6. Clans and reminders
 
-### 5.2. Единая панель состояния — обязательно
+Track the current clan, CWL clan and pinned regular-war clan separately. Accept a manually scheduled transfer. Show actions such as returning to an eligible war clan. Optional local reminders cover unused attacks during the final hour of a war or CWL round and scheduled transfers when due. A timed plan can trigger offline. Game reminders require fresh API data.
 
-- Для каждого аккаунта — отдельные статусы **КВ**, **ЛВК** и **Ranked**.
-- Явное разделение состояний: `атаки остались`, `выполнено`, `не участвует`, `ожидается`, `данные недоступны`.
-- Сортировка/выделение аккаунтов, требующих внимания.
-- Указание времени актуальности данных, а при сбое — отображение последнего известного состояния с пометкой, что оно устарело.
-- Отсутствие ложного `0 атак`, когда API не вернул достаточных данных.
+### 5.7. Settings and offline use
 
-### 5.3. КВ — обязательно
+Provide manual refresh and an adjustable interval within API limits. Persist accounts, settings and transfer plans locally. Show labeled cached snapshots offline. Support light and dark Omarchy palettes and update the interface when the desktop theme changes. Users can enable reminders across graphical logins and close the window while reminders run.
 
-- Получение данных об обычной КВ отслеживаемого клана.
-- Сопоставление игрока с участниками войны по тегу.
-- Учёт использованных и оставшихся атак в соответствии с правилами конкретного типа войны.
-- Отображение состояния войны и времени окончания, если эти данные доступны.
+## 6. Interface requirements
 
-### 5.4. ЛВК — обязательно
+The main screen should answer “Which account needs me now?” Show the action and remaining attacks directly on the card. Keep all three modes visually distinct. Provide understandable loading, empty and error states. Use legible text labels as well as color. The desktop layout should allow later adaptation to smaller screens.
 
-- Хранение привязки аккаунта к клану участия в текущем сезоне ЛВК.
-- Получение группы ЛВК и сведений о соответствующем раунде.
-- Определение наличия игрока в составе и факта выполненной атаки.
-- Отображение статуса атаки текущего раунда и оставшегося времени при наличии соответствующих данных.
-- Сохранение возможности отслеживания ЛВК, даже если игрок временно состоит в другом клане.
+## 7. Data sources and integrations
 
-### 5.5. Индивидуальная рейтинговая лига — обязательно, после проверки API
+Prefer the official read-only [Supercell developer API](https://developer.clashofclans.com/).
 
-- Получение актуальной рейтинговой лиги игрока и доступных сведений о турнире/периоде.
-- Вычисление количества уже использованных и оставшихся рейтинговых атак **только на основе подтверждённых данных**.
-- Поддержка разных лимитов и периодов: не фиксировать число атак или длительность периода в коде как универсальную константу.
-- Корректный сброс счётчиков при начале нового периода и обработка смены лиги.
-- Если официального API недостаточно, изучить допустимые сторонние источники, их полноту, задержки и условия использования; до принятия решения показывать статус `недостаточно данных`.
-
-### 5.6. Кланы и напоминания — первая очередь / развитие
-
-- Учёт текущего клана, клана ЛВК и других отслеживаемых кланов как **разных сущностей**.
-- Возможность задать планируемый переход между кланами вручную.
-- В интерфейсе показывать соответствующие действия, например: `вернуться в клан ЛВК`.
-- Позднее — локальные уведомления о приближении окончания войны, наличии неиспользованных атак и запланированном переходе.
-- Напоминания не должны подменять проверку фактических данных API.
-
-### 5.7. Настройки и локальная работа — обязательно
-
-- Настройка периода обновления в пределах допустимых ограничений API.
-- Кнопка ручного обновления.
-- Локальное хранение списка аккаунтов, настроек и планов переходов.
-- После потери интернета — отображение последних сохранённых данных с отметкой об их неактуальности.
-- Поддержка тёмного и светлого оформления; на Omarchy — автоматическое следование палитре активной темы, включая смену темы во время работы.
-
-## 6. Требования к интерфейсу
-
-- Главный экран должен отвечать на вопрос: **«На каком аккаунте мне сейчас нужно что-то сделать?»**
-- Ключевые действия и оставшиеся атаки видны без перехода в детали каждого аккаунта.
-- Обычная КВ, ЛВК и рейтинговая лига визуально разделены и не смешиваются.
-- Предусмотрены понятные состояния загрузки, пустых данных и ошибок.
-- Интерфейс удобен на desktop; архитектура отображения должна допускать последующую адаптацию под мобильные экраны.
-- Поддерживаются аккуратные тёмные темы, согласованная цветовая палитра, доступное текстовое обозначение статусов (не только цвет).
-
-## 7. Источники данных и интеграции
-
-**Приоритет:** официальный read-only Clash of Clans API от Supercell: <https://developer.clashofclans.com/>.
-
-Ориентировочно полезные методы API (конкретные поля и поведение проверяются на реальных ответах):
-
-| Данные | Метод |
+| Resource | Endpoint |
 | --- | --- |
-| Профиль игрока | `GET /players/{playerTag}` |
-| Текущий клан | `GET /clans/{clanTag}` |
-| Обычная КВ | `GET /clans/{clanTag}/currentwar` |
-| Группа ЛВК | `GET /clans/{clanTag}/currentwar/leaguegroup` |
-| Конкретная война ЛВК | `GET /clanwarleagues/wars/{warTag}` |
-| Недавние бои игрока | `GET /players/{playerTag}/battlelog` |
+| Player profile | `GET /players/{playerTag}` |
+| Clan profile | `GET /clans/{clanTag}` |
+| Current regular war | `GET /clans/{clanTag}/currentwar` |
+| CWL group | `GET /clans/{clanTag}/currentwar/leaguegroup` |
+| CWL war | `GET /clanwarleagues/wars/{warTag}` |
+| Ranked group | `GET /leaguegroup/{leagueGroupTag}/{leagueSeasonId}` |
+| Recent battles | `GET /players/{playerTag}/battlelog` |
 
-**Критически важная проверка перед разработкой:** выяснить, позволяет ли комбинация официальных ответов API достоверно установить **число использованных и оставшихся атак в индивидуальном Ranked** в текущем периоде. Наличие журнала боёв само по себе не гарантирует, что его полноты достаточно для правильного подсчёта.
+The presence of a battle log alone does not establish that it contains every attack in the period or the player's personal allowance. Third-party histories can have gaps and polling delays. Any additional provider must be identified and used in accordance with its terms. ClashKing is a candidate for research. [ClashKing API](https://api.clashk.ing/docs)
 
-Допускается исследование сторонних сервисов, например <https://api.clashk.ing/docs>, но их данные могут быть накоплены опросом API и иметь задержки или неполный охват. Любой дополнительный источник должен явно указываться в проекте; необходимо соблюдать его условия использования.
+Farming, Ranked, regular war and CWL follow distinct rules. Ranked allowances and league structure changed in 2026 and may change again. [Supercell release notes](https://supercell.com/en/games/clashofclans/blog/release-notes/the-sound-of-clash-update/)
 
-Разделение игровых режимов учитывать согласно действующей механике Clash of Clans: обычные бои для фарма, индивидуальные рейтинговые бои, КВ и ЛВК — не одна и та же активность. Лимиты рейтинговых атак и структура лиг менялись в 2026 году; правила нельзя считать неизменными.
+## 8. Technical requirements
 
-## 8. Технические требования — общие ориентиры
+Use Clang-supported C++26 features, CMake, Qt 6 Quick and QML, Qt Network and SQLite through Qt SQL. Separate the API client, domain decisions, storage and presentation. Use a maintainable local architecture that the author can explain. Introduce a backend only for a demonstrated requirement.
 
-**Основной язык:** C++26 (Clang; только поддерживаемые возможности).
-**Предпочтительный UI:** Qt 6 / Qt Quick (QML).  
-**Сборка:** CMake.  
-**Сетевое взаимодействие:** штатные средства Qt Network.  
-**Хранение:** локальные настройки и, при необходимости, SQLite для аккаунтов, истории и пользовательских планов.
+### Security and API constraints
 
-Логически разделить:
+- Use public game data and avoid collecting account passwords or automating game actions.
+- Exclude API credentials from the repository, logs and distributed binaries. A local developer configuration is acceptable.
+- Handle IP-bound keys, rate limits, authorization errors and outages. A future mobile or publicly distributed client may need a separately designed secure intermediary.
+- Show when data was obtained and distinguish an actual absence of attacks from a failed request.
 
-1. **API-клиент** — сетевые запросы, разбор ответов, обработка ошибок.
-2. **Предметную логику** — аккаунты, войны, раунды, атаки, кланы, определение статусов.
-3. **Хранение данных** — настройки, список аккаунтов, планы, кеш.
-4. **Интерфейс** — отображение состояния и взаимодействие с пользователем.
+## 9. Quality requirements
 
-Не требуется заранее выбирать сложные паттерны, микросервисы или отдельный backend. Начинать следует с простой архитектуры, которую разработчик способен полностью объяснить и самостоятельно поддерживать.
+A failed request must preserve other accounts' data and leave the UI responsive. Show the source, timestamp and uncertainty. Isolate platform-specific integration from domain logic. Keep components small and document build requirements and important decisions. Protect secrets in storage, logs and error messages. Prefer local operation without recurring costs and justify any additional infrastructure.
 
-### Безопасность и ограничения API
+## 10. MVP scope
 
-- Не собирать пароли Supercell ID и не автоматизировать действия внутри игры.
-- API-ключи не должны попадать в публичный репозиторий, логи или распространяемые бинарные файлы.
-- Учесть возможную привязку официальных API-ключей к IP-адресу, лимиты запросов, ошибки авторизации и недоступность сервиса.
-- Для локальной desktop-разработки допустима отдельная безопасная конфигурация разработчика.
-- Если для распространяемого мобильного или публичного клиента потребуется защищённый серверный посредник, рассмотреть его отдельным этапом. Не встраивать секретный ключ напрямую в публичный клиент.
-- Отображать время получения данных и отличать действительное отсутствие атак от ошибки получения сведений.
+The Linux MVP includes multiple saved accounts, automatic API access, a unified dashboard, regular-war and CWL attack tracking, individual Ranked status, an independent CWL clan binding, transfer plans and handling of stale or unavailable information. The intended complete product shows the remaining attacks in all three modes without manual bookkeeping. An unavailable exact Ranked counter remains an explicit limitation.
 
-## 9. Нефункциональные требования
+Cloud accounts, synchronization, mobile builds, advanced analytics, in-game actions, mandatory push notifications and multiple speculative providers fall outside the MVP.
 
-- **Надёжность:** ошибка одного запроса не приводит к падению приложения или потере остальных данных.
-- **Отзывчивость:** интерфейс не блокируется на время обращения к API.
-- **Прозрачность:** пользователь видит источник, время обновления и неопределённость данных, когда она есть.
-- **Тестируемость:** предметная логика проверяется автоматически независимо от интерфейса и живого API.
-- **Переносимость:** основная логика не должна зависеть от особенностей Linux или Windows.
-- **Поддерживаемость:** небольшие компоненты, понятная структура проекта, документация по сборке и ключевым решениям.
-- **Безопасность:** секреты не хранятся в исходном коде; ошибки и логи не раскрывают чувствительные данные.
-- **Стоимость:** по возможности локальная работа без регулярных платежей; дополнительные инфраструктурные расходы допустимы только при обоснованной необходимости.
+## 11. Development stages
 
-## 10. Границы MVP
+1. Establish available API data for regular wars, CWL and Ranked.
+2. Fetch one profile with a minimal C++ client and handle failures.
+3. Model multiple accounts, clans, wars, CWL, Ranked and attack status.
+4. Persist accounts, clan bindings, plans, timestamps and cache.
+5. Provide a QML dashboard and account settings.
+6. Refine multi-account operation, unavailable-data handling and Linux documentation.
+7. Extend the desktop workflow with opt-in reminders. Consider mobile UI and secure synchronization when actual demand justifies them.
 
-Первый практически полезный релиз должен включать:
+The educational goal is for the author to understand the implementation and adopt each technology when the next feature needs it.
 
-- работу на Linux;
-- добавление и сохранение нескольких аккаунтов;
-- автоматическое получение данных из API;
-- единую панель со статусами аккаунтов;
-- учёт атак в обычной КВ и ЛВК;
-- отдельный статус индивидуальной рейтинговой лиги и, **если данные позволяют**, автоматический точный расчёт оставшихся атак;
-- учёт клана участия в ЛВК независимо от текущего клана;
-- ручную настройку запланированного перехода между кланами;
-- обработку недоступных и устаревших данных.
+## 12. Acceptance criteria
 
-**Критерий полноты продуктового MVP:** пользователь действительно может проверить оставшиеся атаки по всем трём интересующим режимам без ручной отметки результатов. Если для Ranked точный учёт технически недоступен, это **открытое ограничение/блокер полной функциональности**, а не основание незаметно заменить автоматизацию ручным вводом.
+- Users can add multiple accounts by tag and see their names, tags and known current clans.
+- Regular wars and CWL are tracked separately. Attack counts reflect participation and actual game data.
+- CWL tracking survives a temporary clan transfer.
+- Ranked excludes farming and clan wars. The UI shows a remainder when supported and explains any limitation.
+- The overview identifies accounts that need action. A transfer plan is saved locally and the player performs it in the game.
+- Network failures preserve labeled snapshots. Updating accounts leaves the UI responsive and persists local settings.
+- API keys stay out of the repository and distributed binaries.
+- The application runs on Linux.
 
-### Не входит в MVP
+## 13. Risks and open questions
 
-- регистрация пользователей и облачная учётная запись;
-- синхронизация между устройствами;
-- Android/iOS-сборки;
-- система сложной аналитики и рейтингов;
-- управление игрой, автоматическое проведение атак или автоматический переход между кланами;
-- обязательные push-уведомления;
-- поддержка множества сторонних API без доказанной необходимости.
-
-## 11. Предполагаемые этапы разработки
-
-1. **Проверка реализуемости:** получить тестовые ответы API для нескольких собственных аккаунтов; исследовать КВ, ЛВК и, прежде всего, достоверность учёта Ranked.
-2. **Минимальный C++ API-клиент:** получить профиль одного игрока, обработать ответ и ошибки.
-3. **Предметная модель:** несколько аккаунтов, кланы, обычные КВ, ЛВК, индивидуальный Ranked; написать тесты на статусы и подсчёт атак.
-4. **Локальное хранение и кеш:** список аккаунтов, пользовательские привязки кланов, планы переходов, время обновления.
-5. **Минимальный QML-интерфейс:** единая панель и экран настройки аккаунтов.
-6. **Доработка MVP:** реальные сценарии нескольких аккаунтов, обработка недоступных сведений, документация, тестирование на Linux.
-7. **Расширение:** Windows, уведомления, адаптация UI под Android/iOS, защищённая синхронизация — только при возникновении реальной потребности.
-
-Цель разработки — не максимальная скорость написания кода, а самостоятельное понимание устройства программы. Каждую новую технологию следует осваивать по мере необходимости для следующей функции.
-
-## 12. Критерии приёмки
-
-- [ ] Можно добавить несколько аккаунтов по тегам без ввода паролей.
-- [ ] Для каждого аккаунта отображаются имя, тег и известный текущий клан.
-- [ ] Обычные КВ и ЛВК отслеживаются **раздельно**.
-- [ ] Подсчёт оставшихся атак в КВ/ЛВК основан на реальных данных и учитывает участие игрока.
-- [ ] Информация о ЛВК не теряется при временной смене текущего клана.
-- [ ] Индивидуальный Ranked не смешивается с КВ, ЛВК и обычными боями для фарма.
-- [ ] Доступность корректного автоматического подсчёта Ranked подтверждена проверкой API; если подтверждения нет, ограничение явно отображается.
-- [ ] На главном экране понятно, каким аккаунтам требуется внимание.
-- [ ] Можно сохранить план перехода в другой клан; приложение не пытается выполнить этот переход в игре.
-- [ ] Сетевые ошибки и устаревшие данные отображаются корректно, без ложных значений.
-- [ ] Приложение сохраняет локальные настройки и не блокирует интерфейс при обновлении.
-- [ ] Ключи API не включаются в репозиторий или распространяемый бинарный файл.
-- [ ] Основная предметная логика покрыта автоматическими тестами, а приложение проверено на Linux.
-
-## 13. Основные риски и открытые вопросы
-
-| Риск / вопрос | Подход |
+| Risk | Response |
 | --- | --- |
-| Недостаточно данных API для точного счётчика Ranked | Исследовать до реализации UI; не подменять точные значения догадками |
-| Изменения правил и числа рейтинговых атак | Отделить правила расчёта от интерфейса и избегать универсальных жёстко заданных лимитов |
-| Игрок участвует в ЛВК не в текущем клане | Хранить привязку к клану ЛВК отдельно |
-| Война недоступна через API или закрыты сведения о войне | Показывать `данные недоступны`, а не `атак нет` |
-| Ограничения API-ключей при мобильной публикации | Рассмотреть защищённый backend на более позднем этапе |
-| Слишком раннее усложнение проекта | Начать с одного клиента и локального MVP, наращивать функции постепенно |
-| Готовые аналоги War Report и ClashKing | Не ставить уникальность целью: первична собственная потребность и самостоятельная инженерная практика |
+| Incomplete Ranked data | Require evidence for both usage and allowance before displaying a count. |
+| Changing league rules | Keep the rules outside the UI and support varying limits. |
+| CWL played in another clan | Store the CWL binding independently. |
+| A private or inaccessible war | Display an unavailable status. |
+| Keys restricted by IP on future mobile releases | Evaluate a secure backend at that stage. |
+| Premature complexity | Begin with the local client and expand on demand. |
+| Existing tools such as War Report and ClashKing | Prioritize the author's workflow and engineering practice. |
 
-## 14. Публикация и правовые условия
+## 14. Publication and legal considerations
 
-AccountsManager является **неофициальным** фанатским приложением. При публикации необходимо соблюдать условия Supercell, включая требования к товарным знакам, игровым материалам, отсутствию запрещённой автоматизации и соответствующее уведомление о неофициальном статусе.
-
-Рекомендуемый текст уведомления из политики Supercell:
+AccountsManager is an unofficial fan application. A public release must respect Supercell's terms for trademarks, game materials, permitted behavior and attribution. Review the current policy and dependency licenses before distribution. Fan content is generally intended for noncommercial use unless separately authorized by Supercell. [Fan Content Policy](https://supercell.com/en/fan-content-policy/)
 
 > This material is unofficial and is not endorsed by Supercell. For more information see Supercell's Fan Content Policy: www.supercell.com/fan-content-policy.
 
-По действующей Fan Content Policy обычный фанатский контент должен быть некоммерческим, если Supercell отдельно не разрешила иное. Перед публичным релизом необходимо повторно проверить актуальные условия.
+## 15. Development references
 
-## 15. Ссылки для разработки
+- [Official Clash of Clans Developer Portal](https://developer.clashofclans.com/)
+- [Unofficial Markdown mirror of the API reference](https://github.com/MasiaAntoine/clash-of-clan-api-doc-official)
+- [ClashKing API](https://api.clashk.ing/docs)
+- [Ranked rule changes, April 27, 2026](https://supercell.com/en/games/clashofclans/blog/release-notes/the-sound-of-clash-update/)
+- [Supercell Fan Content Policy](https://supercell.com/en/fan-content-policy/)
+- [Qt 6 documentation](https://doc.qt.io/qt-6/)
 
-- [Официальный Clash of Clans Developer Portal](https://developer.clashofclans.com/)
-- [Документация Clash of Clans API в Markdown — неофициальная републикация](https://github.com/MasiaAntoine/clash-of-clan-api-doc-official)
-- [ClashKing API — дополнительный источник, требующий проверки](https://api.clashk.ing/docs)
-- [Официальные изменения Ranked от 27 апреля 2026 года](https://supercell.com/en/games/clashofclans/blog/release-notes/the-sound-of-clash-update/)
-- [Политика Supercell для фанатского контента](https://supercell.com/en/fan-content-policy/)
-- [Qt 6 Documentation](https://doc.qt.io/qt-6/)
-
----
-
-**Основной принцип реализации:** сначала полезный и понятный разработчику продукт, затем расширение возможностей. API-интеграция обязательна; ручной учёт выполненных атак не является заменой основной функции.
-
-## Согласованные уточнения реализации от 17 ноября 2026
-
-- Linux MVP использует Qt Quick, Qt Network и SQLite через Qt SQL.
-- Обычная КВ отслеживается по текущему либо закреплённому клану; клан ЛВК независим.
-- Сначала реализуется предметная логика и хранение, затем интерфейс.
-- По решению автора постоянные тесты, фикстуры, CTest и тестовые цели в репозиторий
-  не добавляются. Требования автоматического покрытия выше остаются согласованным
-  исключением; проверки выполняются отдельными программами во временном каталоге.
-- Локальный MVP допускается с явным ограничением Ranked. Полнота первоначального
-  продуктового сценария Ranked при этом не заявляется. Состояние проверки API
-  описано в [контракте API](api_contract.md).
+The Linux implementation uses Qt Quick, Qt Network and SQLite. Regular wars follow the current or pinned clan, and the CWL clan remains independent. The application derives game activity from the API. Current limitations are described in the [API contract](api_contract.md).
